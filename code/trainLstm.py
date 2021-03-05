@@ -27,14 +27,15 @@ def get_judge():
 def train(model, trk, bs):
     multi = 2
     judge = get_judge()
-    paras = list(model.parameters)+list(judge.parameters())
+    paras = list(model.parameters())+list(judge.parameters())
     optimizer = optim.Adam(paras, lr=0.001)
     for i in range(100):
         print("Epoch %d" % i)
         losses = []
         accs = []
         ds_size = len(trk)
-        for j in range(int(ds_size / bs) + 1):
+        print(int(ds_size ) )
+        for j in range(int(ds_size / bs) ):
             print("batch num %d" % j)
             this_trk = trk[j * bs:(j + 1) * bs]
             preloaded_train = process_data(this_trk)
@@ -50,16 +51,16 @@ def train(model, trk, bs):
             a_append = np.concatenate((a,i),axis=1)
             out, h = model(q_append,a_append,vis_append)
             result = judge(torch.cat((h[0][0],h[1][0]), 1))
-
+           # print(result.shape)
             correct = result[0:bs]
             incorrect = result[bs:bs*2]
-
-            correct_mean = Variable(torch.Tensor(numpy.array([1.0])), requires_grad=False)
-            incorrect_mean = Variable(torch.Tensor(numpy.array([0.])), requires_grad=False)
+           # print(correct, incorrect)
+            correct_mean = Variable(torch.Tensor(numpy.ones((bs,1))), requires_grad=False)
+            incorrect_mean = Variable(torch.Tensor(numpy.zeros((bs,1))), requires_grad=False)
 
             optimizer.zero_grad()
 
-            loss = (nn.MSELoss()(correct.mean(), correct_mean) + nn.MSELoss()(incorrect.mean(), incorrect_mean))
+            loss = (nn.MSELoss()(correct, correct_mean.float()) + nn.MSELoss()(incorrect, incorrect_mean.float()))
             loss.backward()
             optimizer.step()
             losses.append(loss.cpu().detach().numpy())
@@ -72,7 +73,7 @@ def train(model, trk, bs):
 if __name__ == "__main__":
 
 
-    bs = 32
+    bs = 12
     trk, dek = get_data()
     model = DualLstm()
     train(model, trk, bs)

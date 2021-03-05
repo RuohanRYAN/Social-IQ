@@ -12,7 +12,7 @@ from model import mylstm
 import h5py
 import mmsdk
 from mmsdk import mmdatasdk
-from mmsdk.mmmodelsdk.fusion import TensorFusion
+
 import numpy
 import pickle
 from random import shuffle

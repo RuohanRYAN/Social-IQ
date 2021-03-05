@@ -1,8 +1,9 @@
 import torch
 from torch.autograd import Variable
-import torch.nn
+import torch.nn as nn
 import torch.nn.functional as F
 from model import mylstm
+import numpy as np
 
 class DualLstm(nn.Module):
     def __init__(self):
