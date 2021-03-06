@@ -73,7 +73,7 @@ def train(model, trk,dek, bs):
             vis_append = vis_append[index].transpose(1,0,2)
             out, h = model(q_append,a_append,vis_append)
             result = judge(torch.cat((h[0][0],h[1][0]), 1))
-           # print(result.shape)
+            print(index, cIndex, iIndex)
             correct = result[cIndex]
             incorrect = result[iIndex]
            # print(correct, incorrect)
@@ -124,7 +124,7 @@ def train(model, trk,dek, bs):
 if __name__ == "__main__":
 
 
-    bs = 32
+    bs = 10
     trk, dek = get_data()
     model = DualLstm()
     train(model, trk,dek, bs)
