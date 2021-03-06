@@ -48,9 +48,15 @@ def qai_to_tensor(in_put, keys, total_i=1):
 
     return q_tensor, ai_tensor[:, :, :, 0:1, :, :], ai_tensor[:, :, :, 1:1 + total_i, :, :]
 
-
+'''
 def flatten_qail(_input):
     return _input.reshape(-1, *(_input.shape[3:])).squeeze().transpose(1, 0, 2)
+'''
+
+def flatten_qail(_input):
+    y = _input.squeeze().transpose(3, 0, 1, 2, 4)
+    y = y.reshape(-1, *(y.shape[0:2])).transpose(1, 2, 0)
+    return y
 
 
 def build_qa_binary(qa_glove, keys):
@@ -121,6 +127,44 @@ def get_data():
             except:
                 pass
     return trk, dek
+
+if  __name__ == "__main__":
+    trk, dek = get_data()
+    ds_size = len(trk)
+    path = 'features_tr/'
+    #1-correct
+    for j in range(int(ds_size)):
+        print("batch num %d" % j)
+        this_trk = trk[j]
+        preloaded_train = process_data(this_trk)
+        qas, visual = preloaded_train[0], preloaded_train[1]
+        q, a, i = [data for data in qas]
+        print(q.shape, visual.shape)
+        q = flatten_qail(q) #len, f
+        a = flatten_qail(a)
+        i = flatten_qail(i)
+        print(q.shape)
+        np.savez(path + trk[j], q = q, a = a, v = visual, label=1)
+        np.savez(path + trk[j]+'i', q=q, a=i, v=visual, label=0)
+
+    ds_size1 = len(dek)
+    path1 = 'features_de/'
+    # 1-correct
+    for j in range(int(ds_size1)):
+        print("batch num %d" % j)
+        this_dek = dek[j]
+        preloaded_train = process_data(this_dek)
+        qas, visual = preloaded_train[0], preloaded_train[1]
+        q, a, i = [data for data in qas]
+        print(q.shape, visual.shape)
+        q = flatten_qail(q)  # len, f
+        a = flatten_qail(a)
+        i = flatten_qail(i)
+        print(q.shape)
+        np.savez(path1 + dek[j], q=q, a=a, v=visual, label=1)
+        np.savez(path1 + dek[j] + 'i', q=q, a=i, v=visual, label=0)
+
+
 
 
 
