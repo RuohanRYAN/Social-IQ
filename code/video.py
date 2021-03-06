@@ -54,8 +54,8 @@ def flatten_qail(_input):
 '''
 
 def flatten_qail(_input):
-    y = _input.squeeze().transpose(3, 0, 1, 2, 4)
-    y = y.reshape(-1, *(y.shape[0:2])).transpose(1, 2, 0)
+    y = _input.squeeze().transpose(2, 0, 1, 3)
+    y = y.reshape(-1, *(y.shape[0:1])).transpose(1,0)
     return y
 
 
@@ -135,15 +135,16 @@ if  __name__ == "__main__":
     #1-correct
     for j in range(int(ds_size)):
         print("batch num %d" % j)
-        this_trk = trk[j]
+        this_trk = trk[j:j+1]
         preloaded_train = process_data(this_trk)
         qas, visual = preloaded_train[0], preloaded_train[1]
         q, a, i = [data for data in qas]
-        print(q.shape, visual.shape)
+       # print(q.shape, visual.shape)
         q = flatten_qail(q) #len, f
         a = flatten_qail(a)
         i = flatten_qail(i)
-        print(q.shape)
+        visual = visual.squeeze()
+       # print(q.shape, visual.shape)
         np.savez(path + trk[j], q = q, a = a, v = visual, label=1)
         np.savez(path + trk[j]+'i', q=q, a=i, v=visual, label=0)
 
@@ -152,15 +153,16 @@ if  __name__ == "__main__":
     # 1-correct
     for j in range(int(ds_size1)):
         print("batch num %d" % j)
-        this_dek = dek[j]
+        this_dek = dek[j:j+1]
         preloaded_train = process_data(this_dek)
         qas, visual = preloaded_train[0], preloaded_train[1]
         q, a, i = [data for data in qas]
-        print(q.shape, visual.shape)
+        #print(q.shape, visual.shape)
         q = flatten_qail(q)  # len, f
         a = flatten_qail(a)
         i = flatten_qail(i)
-        print(q.shape)
+        visual = visual.squeeze()
+       # print(q.shape)
         np.savez(path1 + dek[j], q=q, a=a, v=visual, label=1)
         np.savez(path1 + dek[j] + 'i', q=q, a=i, v=visual, label=0)
 
