@@ -100,7 +100,7 @@ def train(model, trk,dek, bs):
 if __name__ == "__main__":
 
 
-    bs = 12
+    bs = 10
     trk, dek = get_data()
     model = DualLstm()
     train(model, trk,dek, bs)
