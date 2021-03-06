@@ -9,6 +9,7 @@ import time
 import scipy.misc
 from LSTMmodel import DualLstm
 from video import *
+import random
 
 
 def flatten_qail(_input):
@@ -29,6 +30,17 @@ def calc_accuracy(correct, incorrect):
     incorrect_ = incorrect.cpu()
     return numpy.array(correct_ > incorrect_, dtype="float32").sum() / correct.shape[0]
 
+def get_indexs(index):
+    th = len(index)/2
+    cIndex = []
+    iIndex = []
+    for i in range(len(index)):
+        if index[i] < th:
+            cIndex.append(i)
+        else:
+            iIndex.append(i)
+    return cIndex, iIndex
+
 def train(model, trk,dek, bs):
     multi = 2
     judge = get_judge()
@@ -45,19 +57,25 @@ def train(model, trk,dek, bs):
             this_trk = trk[j * bs:(j + 1) * bs]
             preloaded_train = process_data(this_trk)
 
-            qas, visual, trs, acc = preloaded_train[0], preloaded_train[1], preloaded_train[2], preloaded_train[3]
+            qas, visual = preloaded_train[0], preloaded_train[1]
             q, a, i = [data for data in qas]
             q = flatten_qail(q)
             a = flatten_qail(a)
             i = flatten_qail(i)
-            vis_append = np.concatenate((visual,visual),axis=1)
-            q_append = np.concatenate((q,q),axis=1)
-            a_append = np.concatenate((a,i),axis=1)
+            vis_append = np.concatenate((visual,visual),axis=1).transpose(1,0,2)
+            q_append = np.concatenate((q,q),axis=1).transpose(1,0,2)
+            a_append = np.concatenate((a,i),axis=1).transpose(1,0,2)
+            index = [k for k in range(bs*2)]
+            random.shuffle(index)
+            cIndex, iIndex = get_indexs(index)
+            q_append = q_append[index].transpose(1,0,2)
+            a_append = a_append[index].transpose(1,0,2)
+            vis_append = vis_append[index].transpose(1,0,2)
             out, h = model(q_append,a_append,vis_append)
             result = judge(torch.cat((h[0][0],h[1][0]), 1))
            # print(result.shape)
-            correct = result[0:bs]
-            incorrect = result[bs:bs*2]
+            correct = result[cIndex]
+            incorrect = result[iIndex]
            # print(correct, incorrect)
             correct_mean = Variable(torch.Tensor(numpy.ones((bs,1))), requires_grad=False)
             incorrect_mean = Variable(torch.Tensor(numpy.zeros((bs,1))), requires_grad=False)
@@ -80,18 +98,24 @@ def train(model, trk,dek, bs):
             print("batch num %d" % j)
             this_dek = dek[j * bs:(j + 1) * bs]
             preloaded_dev = process_data(this_dek)
-            qas, visual, trs, acc = preloaded_dev[0], preloaded_dev[1], preloaded_dev[2], preloaded_dev[3]
+            qas, visual = preloaded_dev[0], preloaded_dev[1]
             q, a, i = [data for data in qas]
             q = flatten_qail(q)
             a = flatten_qail(a)
             i = flatten_qail(i)
-            vis_append = np.concatenate((visual, visual), axis=1)
-            q_append = np.concatenate((q, q), axis=1)
-            a_append = np.concatenate((a, i), axis=1)
+            vis_append = np.concatenate((visual, visual), axis=1).transpose(1, 0, 2)
+            q_append = np.concatenate((q, q), axis=1).transpose(1, 0, 2)
+            a_append = np.concatenate((a, i), axis=1).transpose(1, 0, 2)
+            index = [k for k in range(bs * 2)]
+            random.shuffle(index)
+            cIndex, iIndex = get_indexs(index)
+            q_append = q_append[index].transpose(1, 0, 2)
+            a_append = a_append[index].transpose(1, 0, 2)
+            vis_append = vis_append[index].transpose(1, 0, 2)
             out, h = model(q_append, a_append, vis_append)
             result = judge(torch.cat((h[0][0], h[1][0]), 1))
-            correct = result[0:bs]
-            incorrect = result[bs:bs * 2]
+            correct = result[cIndex]
+            incorrect = result[iIndex]
             _accs.append(calc_accuracy(correct, incorrect))
         print("Dev Accs %f", numpy.array(_accs, dtype="float32").mean())
         print("-----------")
@@ -100,7 +124,7 @@ def train(model, trk,dek, bs):
 if __name__ == "__main__":
 
 
-    bs = 10
+    bs = 32
     trk, dek = get_data()
     model = DualLstm()
     train(model, trk,dek, bs)

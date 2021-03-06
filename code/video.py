@@ -89,15 +89,15 @@ def build_trs(trs, keys):
 def process_data(keys):
     qa_glove = social_iq["QA_BERT_lastlayer_binarychoice"]
     visual = social_iq["DENSENET161_1FPS"]
-    transcript = social_iq["Transcript_Raw_Chunks_BERT"]
-    acoustic = social_iq["Acoustic"]
+   # transcript = social_iq["Transcript_Raw_Chunks_BERT"]
+    #acoustic = social_iq["Acoustic"]
 
     qas = build_qa_binary(qa_glove, keys)
     visual = build_visual(visual, keys)
-    trs = build_trs(transcript, keys)
-    acc = build_acc(acoustic, keys)
+ #   trs = build_trs(transcript, keys)
+  #  acc = build_acc(acoustic, keys)
 
-    return qas, visual, trs, acc
+    return qas, visual
 
 
 def to_pytorch(_input):
