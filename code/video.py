@@ -103,10 +103,7 @@ def process_data(keys):
 def to_pytorch(_input):
     return Variable(torch.tensor(_input))
 
-def calc_accuracy(correct, incorrect):
-    correct_ = correct.cpu()
-    incorrect_ = incorrect.cpu()
-    return numpy.array(correct_ > incorrect_, dtype="float32").sum() / correct.shape[0]
+
 
 
 def reshape_to_correct(_input, shape):

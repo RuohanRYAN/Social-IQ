@@ -24,12 +24,17 @@ def get_judge():
         ('sig1', nn.Sigmoid()),
                 ]))
 
-def train(model, trk, bs):
+def calc_accuracy(correct, incorrect):
+    correct_ = correct.cpu()
+    incorrect_ = incorrect.cpu()
+    return numpy.array(correct_ > incorrect_, dtype="float32").sum() / correct.shape[0]
+
+def train(model, trk,dek, bs):
     multi = 2
     judge = get_judge()
     paras = list(model.parameters())+list(judge.parameters())
     optimizer = optim.Adam(paras, lr=0.001)
-    for i in range(100):
+    for i in range(1):
         print("Epoch %d" % i)
         losses = []
         accs = []
@@ -39,7 +44,6 @@ def train(model, trk, bs):
             print("batch num %d" % j)
             this_trk = trk[j * bs:(j + 1) * bs]
             preloaded_train = process_data(this_trk)
-            preloaded_dev = process_data(this_trk)
 
             qas, visual, trs, acc = preloaded_train[0], preloaded_train[1], preloaded_train[2], preloaded_train[3]
             q, a, i = [data for data in qas]
@@ -70,10 +74,33 @@ def train(model, trk, bs):
         print("Loss %f", numpy.array(losses, dtype="float32").mean())
         print("Accs %f", numpy.array(accs, dtype="float32").mean())
 
+        _accs = []
+        ds_size = len(dek)
+        for j in range(int(ds_size / bs)):
+            print("batch num %d" % j)
+            this_dek = dek[j * bs:(j + 1) * bs]
+            preloaded_dev = process_data(this_dek)
+            qas, visual, trs, acc = preloaded_dev[0], preloaded_dev[1], preloaded_dev[2], preloaded_dev[3]
+            q, a, i = [data for data in qas]
+            q = flatten_qail(q)
+            a = flatten_qail(a)
+            i = flatten_qail(i)
+            vis_append = np.concatenate((visual, visual), axis=1)
+            q_append = np.concatenate((q, q), axis=1)
+            a_append = np.concatenate((a, i), axis=1)
+            out, h = model(q_append, a_append, vis_append)
+            result = judge(torch.cat((h[0][0], h[1][0]), 1))
+            correct = result[0:bs]
+            incorrect = result[bs:bs * 2]
+            _accs.append(calc_accuracy(correct, incorrect))
+        print("Dev Accs %f", numpy.array(_accs, dtype="float32").mean())
+        print("-----------")
+
+
 if __name__ == "__main__":
 
 
     bs = 12
     trk, dek = get_data()
     model = DualLstm()
-    train(model, trk, bs)
+    train(model, trk,dek, bs)
