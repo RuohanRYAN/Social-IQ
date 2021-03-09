@@ -114,12 +114,16 @@ def reshape_to_correct(_input,shape):
 def print_model(model):
     for name, module in model.named_children():
         print(name, module)
+
+
 class classifier(nn.Module):
-    def __init__(self,temp_dim, input_dim, arch):
+    def __init__(self,temp_dim, input_dim, arch,input_qas_dim, qas_arch):
         super(classifier,self).__init__()
         self.temp_dim = temp_dim
         self.input_dim = input_dim
+        self.input_qas_dim = input_qas_dim
         self.arch = arch
+        self.qas_arch = qas_arch
         self.build()
     def build(self,):
         self.pool = nn.AvgPool2d((self.temp_dim+2,3), stride=1,padding=1)
@@ -129,11 +133,73 @@ class classifier(nn.Module):
             layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.arch[i])))
             input_dim = self.arch[i]
         self.dock1 = nn.Sequential(OrderedDict(layer))
+        self.dim = self.arch[-1]
+        
+        layer = []
+        input_dim = self.input_qas_dim
+        for i in range(len(self.qas_arch)):
+            layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.qas_arch[i])))
+            input_dim = self.qas_arch[i]
+        self.dock2 = nn.Sequential(OrderedDict(layer))
 
-    def forward(self,x):
-        x = torch.Tensor(x.transpose(1,0,2))
-        print(self.pool(x).shape)
 
+        layer = []
+        input_dim = self.input_qas_dim
+        for i in range(len(self.qas_arch)):
+            layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.qas_arch[i])))
+            input_dim = self.qas_arch[i]
+        self.dock3 = nn.Sequential(OrderedDict(layer))
+
+
+        layer = []
+        input_dim = self.input_qas_dim
+        for i in range(len(self.qas_arch)):
+            layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.qas_arch[i])))
+            input_dim = self.qas_arch[i]
+        self.dock4= nn.Sequential(OrderedDict(layer))
+
+    def get_rep(self, acous, q, a, i):
+        q = q[:,:1,:1,:1,:,:]
+        a = a[:,:1,:1,:1,:,:]
+        i = i[:,:1,:1,:1,:,:]
+        print(q.shape)
+        print("qai before pooling is {q},{a},{i}".format(q=q.shape,a=a.shape,i=i.shape))
+        q = q.transpose(0,4,2,3,1,5)
+        a = a.transpose(0,4,2,3,1,5)
+        i = i.transpose(0,4,2,3,1,5)
+        q_rep = torch.Tensor(q.reshape(*(q.shape[:2]),-1))
+        a_rep = torch.Tensor(a.reshape(*(a.shape[:2]),-1))
+        i_rep = torch.Tensor(i.reshape(*(i.shape[:2]),-1))
+        print("qai after pooling is {q},{a},{i}".format(q=q_rep.shape,a=a_rep.shape,i=i_rep.shape))
+        
+        acous = torch.Tensor(acous.transpose(1,0,2))
+        pooled_acous = self.pool(acous).squeeze()
+        print(pooled_acous.shape)
+        pooled_q = self.pool(q_rep).squeeze()
+        pooled_a = self.pool(a_rep).squeeze()
+        pooled_i = self.pool(i_rep).squeeze()
+        print(pooled_q.shape, pooled_a.shape, pooled_i.shape)
+        pooled_pos= torch.cat((pooled_acous,pooled_q,pooled_a), 1)
+        pooled_neg= torch.cat((pooled_acous,pooled_q,pooled_i), 1)
+        print(pooled_pos.shape)
+        return pooled_pos,pooled_neg
+#        prob = torch.Tensor([1/4,1/4,1/4,1/4])
+#        sample = self.multinomial(prob,self.dim).numpy()
+#        n = sample.shape[0]
+#        ## gneerate samples
+#        b = np.zeros((self.dim,4))
+#        b[np.arange(self.dim),sample] = 1
+#        b = torch.Tensor(b).float().transpose(1,0)
+        
+#        print(b.shape)
+#        acous_docked = self.dock1(pooled_acous)
+#        print(acous_docked.shape)
+        
+
+        
+        #print(pooled_acous.shape)
+    def multinomial(self, prob,n):
+        return torch.multinomial(prob,n,replacement=True)
 
         
 if __name__=="__main__":
@@ -162,9 +228,11 @@ if __name__=="__main__":
                 preloaded_data=None
         ds_size = len(trk)
         temp_dim = 25
-        input_dim = 75
+        input_dim = 74
+        input_qas_dim = 256
+        qas_arch = [1024,512,256]
         arch = [128,256,512]
-        model = classifier(temp_dim,input_dim, arch)
+        model = classifier(temp_dim,input_dim, arch, input_qas_dim, qas_arch)
         print_model(model)
         for j in range(int(ds_size/bs)+1):
             this_trk = trk[j*bs:(j+1)*bs]
@@ -172,8 +240,9 @@ if __name__=="__main__":
             preloaded_dev = process_data(this_trk)
             qas,visual,trs,acc = preloaded_train[0],preloaded_train[1],preloaded_train[2],preloaded_train[3]
             q,a,i = [data for data in qas]
+            print(q.shape)
             print(acc.shape)
-            model(acc)
+            model.get_rep(acc, q, a, i)
             break
 #            print("batch no {i}".format(i=j))
 #            print("question shape is {q}, answer shape is {a}, incorrect answer shape is {i}".format(q=q.shape,a=a.shape,i=i.shape))
