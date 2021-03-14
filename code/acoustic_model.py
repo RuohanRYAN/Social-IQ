@@ -19,6 +19,7 @@ from random import shuffle
 import time
 import numpy as np
 from collections import OrderedDict
+from torch.distributions.multinomial import Multinomial
 
 
 print ("Tensor-MFN code for Social-IQ")
@@ -110,7 +111,7 @@ def to_pytorch(_input):
         return Variable(torch.tensor(_input)) 
 
 def reshape_to_correct(_input,shape):
-        return _input[:,None,None,:].expand(-1,shape[1],shape[2],-1).reshape(-1,_input.shape[1])
+    return _input[:,None,None,:].expand(-1,shape[1],shape[2],-1,-1).reshape(-1,*_input.shape[-2:])
 def print_model(model):
     for name, module in model.named_children():
         print(name, module)
@@ -127,6 +128,7 @@ class classifier(nn.Module):
         self.build()
     def build(self,):
         self.pool = nn.AvgPool2d((self.temp_dim+2,3), stride=1,padding=1)
+        self.conv = nn.Conv2d(1,1,(self.temp_dim+2,3), stride=1, padding=1)
         layer = []
         input_dim = self.input_dim
         for i in range(len(self.arch)):
@@ -159,47 +161,44 @@ class classifier(nn.Module):
         self.dock4= nn.Sequential(OrderedDict(layer))
 
     def get_rep(self, acous, q, a, i):
-        q = q[:,:1,:1,:1,:,:]
-        a = a[:,:1,:1,:1,:,:]
-        i = i[:,:1,:1,:1,:,:]
-        print(q.shape)
-        print("qai before pooling is {q},{a},{i}".format(q=q.shape,a=a.shape,i=i.shape))
-        q = q.transpose(0,4,2,3,1,5)
-        a = a.transpose(0,4,2,3,1,5)
-        i = i.transpose(0,4,2,3,1,5)
-        q_rep = torch.Tensor(q.reshape(*(q.shape[:2]),-1))
-        a_rep = torch.Tensor(a.reshape(*(a.shape[:2]),-1))
-        i_rep = torch.Tensor(i.reshape(*(i.shape[:2]),-1))
-        print("qai after pooling is {q},{a},{i}".format(q=q_rep.shape,a=a_rep.shape,i=i_rep.shape))
-        
-        acous = torch.Tensor(acous.transpose(1,0,2))
-        pooled_acous = self.pool(acous).squeeze()
-        print(pooled_acous.shape)
-        pooled_q = self.pool(q_rep).squeeze()
-        pooled_a = self.pool(a_rep).squeeze()
-        pooled_i = self.pool(i_rep).squeeze()
-        print(pooled_q.shape, pooled_a.shape, pooled_i.shape)
-        pooled_pos= torch.cat((pooled_acous,pooled_q,pooled_a), 1)
-        pooled_neg= torch.cat((pooled_acous,pooled_q,pooled_i), 1)
-        print(pooled_pos.shape)
-        return pooled_pos,pooled_neg
-#        prob = torch.Tensor([1/4,1/4,1/4,1/4])
-#        sample = self.multinomial(prob,self.dim).numpy()
-#        n = sample.shape[0]
-#        ## gneerate samples
-#        b = np.zeros((self.dim,4))
-#        b[np.arange(self.dim),sample] = 1
-#        b = torch.Tensor(b).float().transpose(1,0)
-        
-#        print(b.shape)
-#        acous_docked = self.dock1(pooled_acous)
-#        print(acous_docked.shape)
+        _shape = q.shape
+        q_exp = torch.Tensor(flatten_qail(q)).transpose(0,1)
+        a_exp = torch.Tensor(flatten_qail(a)).transpose(0,1)
+        i_exp = torch.Tensor(flatten_qail(i)).transpose(0,1)
+        acous_reshape = reshape_to_correct(torch.Tensor(acous.transpose(1,0,2)),_shape)
+#        print("acous shape",acous.shape)
+#        print("acous reshape",acous_reshape.shape)
+#        print("q_exp is ",q_exp.shape)
+#        print("a_exp is ",a_exp.shape)
+#        print("i_exp is ",i_exp.shape)
+#        print(a.shape)
+        acous_reshape = acous_reshape.unsqueeze(1)
+        q_exp = q_exp.unsqueeze(1)
+        a_exp = a_exp.unsqueeze(1)
+        i_exp = i_exp.unsqueeze(1)
+        return acous_reshape,q_exp,a_exp,i_exp
         
 
         
         #print(pooled_acous.shape)
     def multinomial(self, prob,n):
         return torch.multinomial(prob,n,replacement=True)
+    def get_multinomial(self, n,prob = torch.Tensor([1,1,1])):
+        return torch.stack([Multinomial(1,prob).sample() for i in range(n)],dim = 0)
+    def forward(self,acous,q,a,i):
+        ac,q,a,i = self.get_rep(acous,q,a,i)
+        ac_rep = self.conv(ac).squeeze()
+        q_rep = self.conv(q).squeeze()
+        a_rep = self.conv(a).squeeze()
+        i_rep = self.conv(i).squeeze()
+        print(ac_rep.shape,q_rep.shape,a_rep.shape,i_rep.shape)
+        print(ac.shape,a.shape)
+
+        weights = torch.Tensor([1/4,1/4,1/4,1/4])
+        prob = self.get_multinomial(ac.shape[0],weights)
+        print(prob.shape)
+
+        
 
         
 if __name__=="__main__":
@@ -240,9 +239,9 @@ if __name__=="__main__":
             preloaded_dev = process_data(this_trk)
             qas,visual,trs,acc = preloaded_train[0],preloaded_train[1],preloaded_train[2],preloaded_train[3]
             q,a,i = [data for data in qas]
-            print(q.shape)
-            print(acc.shape)
-            model.get_rep(acc, q, a, i)
+#            print(q.shape)
+#            print(acc.shape)
+            model(acc, q, a, i)
             break
 #            print("batch no {i}".format(i=j))
 #            print("question shape is {q}, answer shape is {a}, incorrect answer shape is {i}".format(q=q.shape,a=a.shape,i=i.shape))
