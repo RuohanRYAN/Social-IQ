@@ -144,6 +144,7 @@ def feed_forward(keys,q_lstm,a_lstm,v_lstm,t_lstm,ac_lstm,mfn_mem,mfn_delta1,mfn
         trs = np.nan_to_num(trs)
         acc = np.nan_to_num(acc)
         reference_shape=q.shape
+        print("ref shape is {r}".format(r=reference_shape))
 
         q_rep=q_lstm.step(to_pytorch(flatten_qail(q)))[1][0][0,:,:]
         a_rep=a_lstm.step(to_pytorch(flatten_qail(a)))[1][0][0,:,:]
@@ -159,6 +160,7 @@ def feed_forward(keys,q_lstm,a_lstm,v_lstm,t_lstm,ac_lstm,mfn_mem,mfn_delta1,mfn
 
         t_seq=t_full[0]
         print(t_seq.shape)
+        print("t_full[1][0] shape")
         print(t_full[1][0].shape)
         v_seq=v_full[0]
         ac_seq=ac_full[0]
