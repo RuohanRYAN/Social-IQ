@@ -13,9 +13,10 @@ import random
 
 
 def flatten_qail(_input):
-    y = _input.squeeze().transpose(3, 0, 1, 2, 4)
-    y = y.reshape(-1, *(y.shape[0:2])).transpose(1, 2, 0)
-    return y
+   # y = _input.squeeze().transpose(3, 0, 1, 2, 4)
+   # y = y.reshape(-1, *(y.shape[0:2])).transpose(1, 2, 0)
+   # return y
+   return _input.reshape(-1,*(_input.shape[3:])).squeeze().transpose(1,0,2)
 
 def get_judge():
     return nn.Sequential(OrderedDict([
@@ -46,7 +47,7 @@ def train(model, trk,dek, bs):
     judge = get_judge()
     paras = list(model.parameters())+list(judge.parameters())
     optimizer = optim.Adam(paras, lr=0.001)
-    for i in range(1):
+    for i in range(10):
         print("Epoch %d" % i)
         losses = []
         accs = []
@@ -62,7 +63,13 @@ def train(model, trk,dek, bs):
             q = flatten_qail(q)
             a = flatten_qail(a)
             i = flatten_qail(i)
-            vis_append = np.concatenate((visual,visual),axis=1).transpose(1,0,2)
+            for k in range(71):
+                if k==0:
+                    vis = np.concatenate((visual,visual),axis=1)
+                else:
+                    vis = np.concatenate((vis,visual),axis=1)
+           # print(vis.shape, q.shape)
+            vis_append = np.concatenate((vis,vis),axis=1).transpose(1,0,2)
             q_append = np.concatenate((q,q),axis=1).transpose(1,0,2)
             a_append = np.concatenate((a,i),axis=1).transpose(1,0,2)
             index = [k for k in range(bs*2)]
@@ -73,7 +80,7 @@ def train(model, trk,dek, bs):
             vis_append = vis_append[index].transpose(1,0,2)
             out, h = model(q_append,a_append,vis_append)
             result = judge(torch.cat((h[0][0],h[1][0]), 1))
-            print(index, cIndex, iIndex)
+           # print(index, cIndex, iIndex)
             correct = result[cIndex]
             incorrect = result[iIndex]
            # print(correct, incorrect)
@@ -94,6 +101,7 @@ def train(model, trk,dek, bs):
 
         _accs = []
         ds_size = len(dek)
+       # bs = 30
         for j in range(int(ds_size / bs)):
             print("batch num %d" % j)
             this_dek = dek[j * bs:(j + 1) * bs]
@@ -103,7 +111,14 @@ def train(model, trk,dek, bs):
             q = flatten_qail(q)
             a = flatten_qail(a)
             i = flatten_qail(i)
-            vis_append = np.concatenate((visual, visual), axis=1).transpose(1, 0, 2)
+            for k in range(71):
+                if k==0:
+                    vis = np.concatenate((visual,visual),axis=1)
+                else:
+                    vis = np.concatenate((vis,visual),axis=1)
+           # print(vis.shape, q.shape)
+            vis_append = np.concatenate((vis,vis),axis=1).transpose(1,0,2)
+          #  vis_append = np.concatenate((visual, visual), axis=1).transpose(1, 0, 2)
             q_append = np.concatenate((q, q), axis=1).transpose(1, 0, 2)
             a_append = np.concatenate((a, i), axis=1).transpose(1, 0, 2)
             index = [k for k in range(bs * 2)]
@@ -124,7 +139,7 @@ def train(model, trk,dek, bs):
 if __name__ == "__main__":
 
 
-    bs = 10
+    bs = 32
     trk, dek = get_data()
     model = DualLstm()
     train(model, trk,dek, bs)

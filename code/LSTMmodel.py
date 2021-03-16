@@ -9,8 +9,8 @@ class DualLstm(nn.Module):
     def __init__(self):
         super(DualLstm, self).__init__()
         self.vlstm = mylstm.MyLSTM(2208, 256, 2)
-        self.qlstm = mylstm.MyLSTM(55296, 256, 2)
-        self.alstm = mylstm.MyLSTM(55296, 256, 2)
+        self.qlstm = mylstm.MyLSTM(768, 256, 2)
+        self.alstm = mylstm.MyLSTM(768, 256, 2)
 
 
     def forward(self,q,a,vis):

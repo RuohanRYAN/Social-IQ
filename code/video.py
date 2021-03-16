@@ -128,6 +128,7 @@ def get_data():
                 pass
     return trk, dek
 
+'''
 if  __name__ == "__main__":
     trk, dek = get_data()
     ds_size = len(trk)
@@ -165,7 +166,7 @@ if  __name__ == "__main__":
        # print(q.shape)
         np.savez(path1 + dek[j], q=q, a=a, v=visual, label=1)
         np.savez(path1 + dek[j] + 'i', q=q, a=i, v=visual, label=0)
-
+'''
 
 
 
