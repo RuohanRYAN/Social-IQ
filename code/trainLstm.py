@@ -11,6 +11,14 @@ from LSTMmodel import DualLstm
 from video import *
 import random
 
+class MyHingeLoss(torch.nn.Module):
+    def __init__(self):
+        super(MyHingeLoss, self).__init__()
+
+    def forward(self, correct, incorrect):
+        hinge_loss = 1 - correct + incorrect
+        hinge_loss[hinge_loss < 0] = 0
+        return torch.mean(hinge_loss)
 
 def flatten_qail(_input):
    # y = _input.squeeze().transpose(3, 0, 1, 2, 4)
@@ -47,6 +55,7 @@ def train(model, trk,dek, bs):
     judge = get_judge()
     paras = list(model.parameters())+list(judge.parameters())
     optimizer = optim.Adam(paras, lr=0.001)
+    loss = MyHingeLoss()
     for i in range(10):
         print("Epoch %d" % i)
         losses = []
@@ -89,7 +98,8 @@ def train(model, trk,dek, bs):
 
             optimizer.zero_grad()
 
-            loss = (nn.MSELoss()(correct, correct_mean.float()) + nn.MSELoss()(incorrect, incorrect_mean.float()))
+           # loss = (nn.MSELoss()(correct, correct_mean.float()) + nn.MSELoss()(incorrect, incorrect_mean.float()))
+            loss(correct, incorrect)
             loss.backward()
             optimizer.step()
             losses.append(loss.cpu().detach().numpy())
