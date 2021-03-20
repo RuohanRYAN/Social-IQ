@@ -118,14 +118,17 @@ def print_model(model):
 
 
 class classifier(nn.Module):
-    def __init__(self,temp_dim, input_dim, arch,input_qas_dim, qas_arch):
+    def __init__(self,temp_dim, input_dim, arch,input_qas_dim, qas_arch, fuse_dim, judge_arch):
         super(classifier,self).__init__()
         self.temp_dim = temp_dim
         self.input_dim = input_dim
         self.input_qas_dim = input_qas_dim
         self.arch = arch
         self.qas_arch = qas_arch
+        self.fuse_dim = fuse_dim
+        self.judge_arch = judge_arch
         self.build()
+        
     def build(self,):
         self.pool = nn.AvgPool2d((self.temp_dim+2,3), stride=1,padding=1)
         self.conv = nn.Conv2d(1,1,(self.temp_dim+2,3), stride=1, padding=1)
@@ -133,6 +136,7 @@ class classifier(nn.Module):
         input_dim = self.input_dim
         for i in range(len(self.arch)):
             layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.arch[i])))
+            layer.append(("Non-linear{i}".format(i=i), nn.ReLU()))
             input_dim = self.arch[i]
         self.dock1 = nn.Sequential(OrderedDict(layer))
         self.dim = self.arch[-1]
@@ -141,6 +145,7 @@ class classifier(nn.Module):
         input_dim = self.input_qas_dim
         for i in range(len(self.qas_arch)):
             layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.qas_arch[i])))
+            layer.append(("Non-linear{i}".format(i=i), nn.ReLU()))
             input_dim = self.qas_arch[i]
         self.dock2 = nn.Sequential(OrderedDict(layer))
 
@@ -149,6 +154,7 @@ class classifier(nn.Module):
         input_dim = self.input_qas_dim
         for i in range(len(self.qas_arch)):
             layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.qas_arch[i])))
+            layer.append(("Non-linear{i}".format(i=i), nn.ReLU()))
             input_dim = self.qas_arch[i]
         self.dock3 = nn.Sequential(OrderedDict(layer))
 
@@ -157,8 +163,22 @@ class classifier(nn.Module):
         input_dim = self.input_qas_dim
         for i in range(len(self.qas_arch)):
             layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.qas_arch[i])))
+            layer.append(("Non-linear{i}".format(i=i), nn.ReLU()))
             input_dim = self.qas_arch[i]
         self.dock4= nn.Sequential(OrderedDict(layer))
+
+        layer = []
+        input_dim = self.fuse_dim
+        for i in range(len(self.judge_arch)):
+            layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.judge_arch[i])))
+            if(i!=len(self.judge_arch)-1):
+                layer.append(("Non-linear{i}".format(i=i), nn.ReLU()))
+            
+            input_dim = self.judge_arch[i]
+        #layer.append(("final layer", nn.LogSigmoid()))
+        layer.append(("final layer", nn.LogSoftmax(dim=1)))
+        self.judge = nn.Sequential(OrderedDict(layer))
+        
 
     def get_rep(self, acous, q, a, i):
         _shape = q.shape
@@ -166,12 +186,6 @@ class classifier(nn.Module):
         a_exp = torch.Tensor(flatten_qail(a)).transpose(0,1)
         i_exp = torch.Tensor(flatten_qail(i)).transpose(0,1)
         acous_reshape = reshape_to_correct(torch.Tensor(acous.transpose(1,0,2)),_shape)
-#        print("acous shape",acous.shape)
-#        print("acous reshape",acous_reshape.shape)
-#        print("q_exp is ",q_exp.shape)
-#        print("a_exp is ",a_exp.shape)
-#        print("i_exp is ",i_exp.shape)
-#        print(a.shape)
         acous_reshape = acous_reshape.unsqueeze(1)
         q_exp = q_exp.unsqueeze(1)
         a_exp = a_exp.unsqueeze(1)
@@ -180,7 +194,6 @@ class classifier(nn.Module):
         
 
         
-        #print(pooled_acous.shape)
     def multinomial(self, prob,n):
         return torch.multinomial(prob,n,replacement=True)
     def get_multinomial(self, n,prob = torch.Tensor([1,1,1])):
@@ -191,16 +204,35 @@ class classifier(nn.Module):
         q_rep = self.conv(q).squeeze()
         a_rep = self.conv(a).squeeze()
         i_rep = self.conv(i).squeeze()
-        print(ac_rep.shape,q_rep.shape,a_rep.shape,i_rep.shape)
-        print(ac.shape,a.shape)
+        #print(ac_rep.shape,q_rep.shape,a_rep.shape,i_rep.shape)
+        #print(ac.shape,a.shape)
 
         weights = torch.Tensor([1/4,1/4,1/4,1/4])
         prob = self.get_multinomial(ac.shape[0],weights)
-        print(prob.shape)
+        ac_dock = self.dock1(ac_rep)
+        q_dock = self.dock2(q_rep)
+        a_dock = self.dock3(a_rep)
+        i_dock = self.dock4(i_rep)
 
-        
+        #print(ac_dock.shape,q_dock.shape,q_dock.shape,i_dock.shape)
 
+        fuse_a = torch.cat((ac_dock,q_dock,a_dock),dim=1)
+        fuse_i = torch.cat((ac_dock,q_dock,i_dock),dim=1)
         
+        #print(fuse_a.shape, fuse_i.shape)
+        a_res = self.judge(fuse_a) 
+        i_res = self.judge(fuse_i)
+        return a_res,i_res
+def contains_nan(x):
+    a = np.isnan(x)
+    b = x==float('inf')
+    c = x==float('-inf')
+    return not np.sum(a,dtype=int)==0 ,np.any(b) ,np.any(c)
+def convert_nans(x):
+    nan,inf,n_inf = contains_nan(x)
+    if(nan or inf or n_inf):
+        return np.nan_to_num(x,posinf=20,neginf=0)
+    return x 
 if __name__=="__main__":
 
         #if you have enough RAM, specify this as True - speeds things up ;)
@@ -217,7 +249,6 @@ if __name__=="__main__":
                         except:
                                 pass
 
-        #q_lstm,a_lstm,t_lstm,v_lstm,ac_lstm,mfn_mem,mfn_delta1,mfn_delta2,mfn_tfn=init_tensor_mfn_modules()
 
         if preload is True:
                 preloaded_train=process_data(trk)
@@ -228,21 +259,39 @@ if __name__=="__main__":
         ds_size = len(trk)
         temp_dim = 25
         input_dim = 74
-        input_qas_dim = 256
+        input_qas_dim = 768
         qas_arch = [1024,512,256]
         arch = [128,256,512]
-        model = classifier(temp_dim,input_dim, arch, input_qas_dim, qas_arch)
+        judge_arch = [512,256,64,2]
+        fuse_dim = 1024
+        model = classifier(temp_dim,input_dim, arch, input_qas_dim, qas_arch, fuse_dim, judge_arch)
+        optimizer = torch.optim.Adam(model.parameters(),weight_decay = 0.2)
+        loss = nn.NLLLoss()
+        
         print_model(model)
         for j in range(int(ds_size/bs)+1):
             this_trk = trk[j*bs:(j+1)*bs]
             preloaded_train = process_data(this_trk)
             preloaded_dev = process_data(this_trk)
             qas,visual,trs,acc = preloaded_train[0],preloaded_train[1],preloaded_train[2],preloaded_train[3]
+            is_nan = contains_nan(acc)
+            print("there is nan in acoustic {}".format(is_nan))
+            #if(True in is_nan):
+            #    continue
             q,a,i = [data for data in qas]
-#            print(q.shape)
-#            print(acc.shape)
-            model(acc, q, a, i)
-            break
+            acc = convert_nans(acc)    
+            a_res,i_res = model(acc, q, a, i)
+            true = torch.ones(a_res.shape[0],dtype=torch.long)
+            false = torch.zeros(a_res.shape[0],dtype=torch.long)
+            loss_a = loss(a_res, true)
+            loss_i = loss(i_res, false)
+            loss_tot = loss_a+loss_i
+            
+            loss_tot.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            print("total loss is {loss_tot},loss_a is {loss_a},loss_i is {loss_i}".format(loss_tot=loss_tot,loss_a=loss_a,loss_i=loss_i))
+            #break
 #            print("batch no {i}".format(i=j))
 #            print("question shape is {q}, answer shape is {a}, incorrect answer shape is {i}".format(q=q.shape,a=a.shape,i=i.shape))
 #            print("acoustic shape is {acous}".format(acous=acc.shape))
