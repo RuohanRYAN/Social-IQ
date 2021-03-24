@@ -72,11 +72,11 @@ def main(path,dest):
 		print(ave_token_i.shape)
 
 		directory = filename.split(".")[0]
-		path = os.path.join(dest,directory)
-		os.mkdir(path)
+		new_path = os.path.join(dest,directory)
+		os.mkdir(new_path)
 		np.save(dest+directory+"/a.npy", ave_token_a.numpy())
 		np.save(dest+directory+"/i.npy", ave_token_i.numpy())
-		break
+		#break
 
 
 		# break
