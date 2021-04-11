@@ -73,9 +73,9 @@ def main(path,dest):
 
 		directory = filename.split(".")[0]
 		new_path = os.path.join(dest,directory)
-		os.mkdir(new_path)
-		np.save(dest+directory+"/a.npy", ave_token_a.numpy())
-		np.save(dest+directory+"/i.npy", ave_token_i.numpy())
+#		os.mkdir(new_path)
+#		np.save(dest+directory+"/a.npy", ave_token_a.numpy())
+#		np.save(dest+directory+"/i.npy", ave_token_i.numpy())
 		#break
 
 
@@ -96,13 +96,13 @@ def get_tokens(tokens,model):
 		output = model(input_ids=input_ids,attention_mask = input_attention,token_type_ids=input_type)
 
 		hidden_states = output[2]
-		# print ("Number of layers:", len(hidden_states), "  (initial embeddings + 12 BERT layers)")
-		# layer_i = 0
-		# print ("Number of batches:", len(hidden_states[layer_i]))
-		# batch_i = 0
-		# print ("Number of tokens:", len(hidden_states[layer_i][batch_i]))
-		# token_i = 0
-		# print ("Number of hidden units:", len(hidden_states[layer_i][batch_i][token_i]))
+		print ("Number of layers:", len(hidden_states), "  (initial embeddings + 12 BERT layers)")
+		layer_i = 0
+		print ("Number of batches:", len(hidden_states[layer_i]))
+		batch_i = 0
+		print ("Number of tokens:", len(hidden_states[layer_i][batch_i]))
+		token_i = 0
+		print ("Number of hidden units:", len(hidden_states[layer_i][batch_i][token_i]))
 
 		token_embedding = torch.stack(hidden_states, dim=0)
 
