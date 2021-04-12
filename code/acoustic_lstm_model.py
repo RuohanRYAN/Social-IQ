@@ -127,7 +127,7 @@ class classifier(nn.Module):
         self.input_qas_dim = input_qas_dim
         self.arch = arch
         self.qas_arch = qas_arch
-        self.fuse_dim = fuse_dim
+        self.fuse_dim = arch[-1]+qas_arch[-1]
         self.judge_arch = judge_arch
         self.hidden_size = 74
         self.build()
@@ -229,13 +229,6 @@ class classifier(nn.Module):
         acous_a_rep = ahn.transpose(0,1).squeeze()
         acous_i_rep = ihn.transpose(0,1).squeeze()
 
-        # print(acous_a_rep.shape)
-        # print(acous_i_rep.shape)
-
-        # convolutional layer to reduce the temporal dim 
-        # acous_a_rep = self.conv(acous_a[:,None,:,:]).squeeze()
-        # acous_i_rep = self.conv(acous_i[:,None,:,:]).squeeze()
-        # print(acous_a_rep.shape)
 
 
         a = a.reshape(-1,a.shape[-1])
@@ -259,8 +252,8 @@ class classifier(nn.Module):
         a_res_reshape = torch.argmax(a_res,dim=1,keepdim=True).reshape(*(6,4),-1)
         i_res_reshape = torch.argmax(i_res,dim=1,keepdim=True).reshape(*(6,3),-1)
 #        print(a_res.shape,i_res.shape)
-        print(a_res)
-        print(i_res)
+        # print(a_res)
+        # print(i_res)
         return a_res, i_res, a_res_reshape, i_res_reshape
 
     
@@ -328,7 +321,7 @@ if __name__=="__main__":
         input_dim = 74
         input_qas_dim = 768
         qas_arch = [1024,512,256]
-        arch = [128,256,512]
+        arch = [128,256,128]
         judge_arch = [512,256,64,2]
         fuse_dim = 768
         model = classifier(temp_dim,input_dim, arch, input_qas_dim, qas_arch, fuse_dim, judge_arch)
@@ -344,6 +337,8 @@ if __name__=="__main__":
             a_arr, i_arr = load_qai(this_trk)
             # print(a_arr.shape, i_arr.shape)
             # print(acc.shape)
+            # print(acc[0])
+            # print(a_arr[0]) 
             is_nan = contains_nan(acc)
             print("there is nan in acoustic {}".format(is_nan))
             if(True in is_nan):
@@ -376,21 +371,22 @@ if __name__=="__main__":
 
 
         ## validation ##
-        with torch.no_grad():
-            ds_size = len(dek)
-            bs = 1
-            for i in range(int(ds_size/bs)+1):
-                this_dek = dek[i*bs:(i+1)*bs]
-                #print("validation batches")
-                print(this_dek) 
-                if(len(this_dek)==0): continue 
-                preload_dev = process_data(this_dek)
-                qas,_,_,acc = preload_dev[0],preload_dev[1],preload_dev[2],preload_dev[3]
-                a_arr, i_arr = load_qai(this_dek)
-                if(a_arr.shape[1]!=24 or i_arr.shape[1]!=18): 
-                    print(a_arr.shape,i_arr.shape)
-                    print(this_dek)
+        # with torch.no_grad():
+        #     ds_size = len(dek)
+        #     bs = 1
+        #     for i in range(int(ds_size/bs)+1):
+        #         this_dek = dek[i*bs:(i+1)*bs]
+        #         #print("validation batches")
+        #         print(this_dek) 
+        #         if(len(this_dek)==0): continue 
+        #         preload_dev = process_data(this_dek)
+        #         qas,_,_,acc = preload_dev[0],preload_dev[1],preload_dev[2],preload_dev[3]
+        #         a_arr, i_arr = load_qai(this_dek)
+        #         if(a_arr.shape[1]!=24 or i_arr.shape[1]!=18): 
+        #             print(a_arr.shape,i_arr.shape)
+        #             print(this_dek)
 
-                a_res, i_res, a_res_reshape, i_res_reshape = model.predict(acc,a_arr,i_arr)
-                break
+        #         a_res, i_res, a_res_reshape, i_res_reshape = model.predict(acc,a_arr,i_arr)
+
+        #         break
 

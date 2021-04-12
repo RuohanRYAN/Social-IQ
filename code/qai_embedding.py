@@ -50,8 +50,9 @@ def main(path,dest):
 					qi.append(cp)
 			# print(ID)
 			text_array.append(text)
-		tokens = tk(qa, add_special_tokens=True, padding=True, max_length = 128,return_token_type_ids=True, return_attention_mask=True,truncation=True)
-		tokens_i = tk(qi, add_special_tokens=True, padding=True, max_length = 128,return_token_type_ids=True, return_attention_mask=True,truncation=True)
+		tokens = tk(qa, add_special_tokens=True, padding="max_length", max_length = 64,return_token_type_ids=True, return_attention_mask=True,truncation=True)
+		tokens_i = tk(qi, add_special_tokens=True, padding="max_length", max_length = 64,return_token_type_ids=True, return_attention_mask=True,truncation=True)
+
 
 
 		decoded_strings = tk.batch_decode(tokens["input_ids"])
@@ -68,15 +69,15 @@ def main(path,dest):
 		####
 		ave_token_a = get_tokens(tokens,model)
 		ave_token_i = get_tokens(tokens_i,model)
-		print(ave_token_a.shape)
-		print(ave_token_i.shape)
+		# print(ave_token_a.shape)
+		# print(ave_token_i.shape)
 
 		directory = filename.split(".")[0]
-		new_path = os.path.join(dest,directory)
-#		os.mkdir(new_path)
-#		np.save(dest+directory+"/a.npy", ave_token_a.numpy())
-#		np.save(dest+directory+"/i.npy", ave_token_i.numpy())
-		#break
+		os.mkdir(os.path.join(dest,directory))
+		np.save(dest+directory+"/a.npy", ave_token_a.numpy())	
+		np.save(dest+directory+"/i.npy", ave_token_i.numpy())
+		print("------------------------")
+		# break
 
 
 		# break
@@ -96,19 +97,18 @@ def get_tokens(tokens,model):
 		output = model(input_ids=input_ids,attention_mask = input_attention,token_type_ids=input_type)
 
 		hidden_states = output[2]
-		print ("Number of layers:", len(hidden_states), "  (initial embeddings + 12 BERT layers)")
-		layer_i = 0
-		print ("Number of batches:", len(hidden_states[layer_i]))
-		batch_i = 0
-		print ("Number of tokens:", len(hidden_states[layer_i][batch_i]))
-		token_i = 0
-		print ("Number of hidden units:", len(hidden_states[layer_i][batch_i][token_i]))
+		# print ("Number of layers:", len(hidden_states), "  (initial embeddings + 12 BERT layers)")
+		# layer_i = 0
+		# print ("Number of batches:", len(hidden_states[layer_i]))
+		# batch_i = 0
+		# print ("Number of tokens:", len(hidden_states[layer_i][batch_i]))
+		# token_i = 0
+		# print ("Number of hidden units:", len(hidden_states[layer_i][batch_i][token_i]))
 
 		token_embedding = torch.stack(hidden_states, dim=0)
-
-		ave_token = torch.mean(token_embedding,2)
-		# print(ave_token.shape)
-		ave_token = torch.mean(ave_token,0)
+		# print(token_embedding.shape)
+		# ave_token = torch.mean(token_embedding,2)
+		ave_token = torch.mean(token_embedding,0)
 
 		# print(ave_token.shape)
 		# print(token_embedding.size())
@@ -117,5 +117,5 @@ def get_tokens(tokens,model):
 
 
 qa_path = "/home/gaoruohan19/project/Social-IQ/data/rawdata/raw/qa/"
-dest = "/home/gaoruohan19/project/Social-IQ-new/data/qai/"
+dest = "/home/gaoruohan19/project/Social-IQ-new/data/qai_updated/"
 main(qa_path,dest)
