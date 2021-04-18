@@ -130,6 +130,7 @@ class classifier(nn.Module):
         self.fuse_dim = arch[-1]+qas_arch[-1]
         self.judge_arch = judge_arch
         self.hidden_size = 74
+        self.hidden_qas_size = 128
         self.build()
         
     def build(self,):
@@ -139,9 +140,11 @@ class classifier(nn.Module):
 
         ## initialize lstm for acoustic features 
         self.lstm = nn.LSTM(self.input_dim,self.hidden_size,1,batch_first=True)
+        self.lstm_a = nn.LSTM(self.input_qas_dim,self.hidden_qas_size,1,batch_first=True)
+        self.lstm_i = nn.LSTM(self.input_qas_dim,self.hidden_qas_size,1,batch_first=True)
 
         layer = []
-        input_dim = self.input_dim
+        input_dim = self.hidden_size
         for i in range(len(self.arch)):
             layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.arch[i])))
             layer.append(("Non-linear{i}".format(i=i), nn.ReLU()))
@@ -150,7 +153,7 @@ class classifier(nn.Module):
         self.dim = self.arch[-1]
         
         layer = []
-        input_dim = self.input_qas_dim
+        input_dim = self.hidden_qas_size
         for i in range(len(self.qas_arch)):
             layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.qas_arch[i])))
             layer.append(("Non-linear{i}".format(i=i), nn.ReLU()))
@@ -159,7 +162,7 @@ class classifier(nn.Module):
 
 
         layer = []
-        input_dim = self.input_qas_dim
+        input_dim = self.hidden_qas_size
         for i in range(len(self.qas_arch)):
             layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.qas_arch[i])))
             layer.append(("Non-linear{i}".format(i=i), nn.ReLU()))
@@ -167,13 +170,6 @@ class classifier(nn.Module):
         self.dock3 = nn.Sequential(OrderedDict(layer))
 
 
-        layer = []
-        input_dim = self.input_qas_dim
-        for i in range(len(self.qas_arch)):
-            layer.append(("linear {i}".format(i=i), nn.Linear(input_dim,self.qas_arch[i])))
-            layer.append(("Non-linear{i}".format(i=i), nn.ReLU()))
-            input_dim = self.qas_arch[i]
-        self.dock4= nn.Sequential(OrderedDict(layer))
 
         layer = []
         input_dim = self.fuse_dim
@@ -206,7 +202,7 @@ class classifier(nn.Module):
         return torch.multinomial(prob,n,replacement=True)
     def get_multinomial(self, n,prob = torch.Tensor([1,1,1])):
         return torch.stack([Multinomial(1,prob).sample() for i in range(n)],dim = 0)
-    def forward(self,acous,a,i):
+    def forward_outdated(self,acous,a,i):
         # print(acous.shape, a.shape, i.shape)
         acous = torch.tensor(acous).transpose(1,0)
         acous_a = acous[:,None,:,:].expand(-1,a.shape[1],-1,-1)
@@ -224,6 +220,13 @@ class classifier(nn.Module):
         self.a_c0 = torch.randn(1,acous_a.shape[0],self.hidden_size)
         self.i_h0 = torch.randn(1,acous_i.shape[0],self.hidden_size)
         self.i_c0 = torch.randn(1,acous_i.shape[0],self.hidden_size)
+
+        self.qa_h0 = torch.randn(1,acous_a.shape[0],self.hidden_qas_size)
+        self.qa_c0 = torch.randn(1,acous_a.shape[0],self.hidden_qas_size)
+        self.qi_h0 = torch.randn(1,acous_i.shape[0],self.hidden_qas_size)
+        self.qi_c0 = torch.randn(1,acous_i.shape[0],self.hidden_qas_size)
+
+
         _,(ahn,acn) = self.lstm(acous_a,(self.a_h0,self.a_c0))
         _,(ihn,icn) = self.lstm(acous_i,(self.i_h0,self.i_c0))
         acous_a_rep = ahn.transpose(0,1).squeeze()
@@ -231,31 +234,109 @@ class classifier(nn.Module):
 
 
 
-        a = a.reshape(-1,a.shape[-1])
-        i = i.reshape(-1,i.shape[-1])
+        a = a.reshape(-1,*a.shape[2:])
+        i = i.reshape(-1,*i.shape[2:])
         # print(a.shape,i.shape)
 
         acous_a_doc = self.dock1(acous_a_rep)
         acous_i_doc = self.dock1(acous_i_rep)
 
-        a_doc = self.dock2(a)
-        i_doc = self.dock3(i)
-
+        _,(a_doc_hn,a_doc_cn) = self.lstm_a(a,(self.qa_h0,self.qa_c0))
+        _,(i_doc_hn,i_doc_cn) = self.lstm_i(i,(self.qi_h0,self.qi_c0))
+        a_doc = self.dock2(a_doc_hn.squeeze())
+        i_doc = self.dock3(i_doc_hn.squeeze())
         fuse_a = torch.cat((acous_a_doc, a_doc),dim=1)
         fuse_i = torch.cat((acous_i_doc, i_doc),dim=1)
         a_res = self.judge(fuse_a)
         i_res = self.judge(fuse_i)
+        return a_res, i_res 
+    def forward(self,acous,a,i):
+        acous = torch.tensor(acous).transpose(1,0)
+        acous_a = acous[:,None,:,:].expand(-1,a.shape[1],-1,-1)
+        acous_a = acous_a.reshape(-1,*acous_a.shape[2:])
+
+        acous_i = acous[:,None,:,:].expand(-1,i.shape[1],-1,-1)
+        acous_i = acous_i.reshape(-1,*acous_i.shape[2:])
+        a = torch.tensor(a)
+        i = torch.tensor(i)
+        a = a.reshape(-1,*a.shape[2:])
+        i = i.reshape(-1,*i.shape[2:])
+        ## initialing the hidden varibles for lstm models 
+        self.a_h0 = torch.randn(1,acous_a.shape[0],self.hidden_size)
+        self.a_c0 = torch.randn(1,acous_a.shape[0],self.hidden_size)
+        self.i_h0 = torch.randn(1,acous_i.shape[0],self.hidden_size)
+        self.i_c0 = torch.randn(1,acous_i.shape[0],self.hidden_size)
+
+        self.qa_h0 = torch.randn(1,acous_a.shape[0],self.hidden_qas_size)
+        self.qa_c0 = torch.randn(1,acous_a.shape[0],self.hidden_qas_size)
+        self.qi_h0 = torch.randn(1,acous_i.shape[0],self.hidden_qas_size)
+        self.qi_c0 = torch.randn(1,acous_i.shape[0],self.hidden_qas_size)
+        _,(ahn,acn) = self.lstm(acous_a,(self.a_h0,self.a_c0))
+        _,(ihn,icn) = self.lstm(acous_i,(self.i_h0,self.i_c0))
+        _,(a_doc_hn,a_doc_cn) = self.lstm_a(a,(self.qa_h0,self.qa_c0))
+        _,(i_doc_hn,i_doc_cn) = self.lstm_a(i,(self.qi_h0,self.qi_c0))
+
+        acous_a_doc = self.dock1(ahn.squeeze())
+        acous_i_doc = self.dock1(ihn.squeeze())
+        a_doc = self.dock2(a_doc_hn.squeeze())
+        i_doc = self.dock2(i_doc_hn.squeeze())
+        fuse_a = torch.cat((acous_a_doc, a_doc),dim=1)
+        fuse_i = torch.cat((acous_i_doc, i_doc),dim=1)
+        a_res = self.judge(fuse_a)
+        i_res = self.judge(fuse_i)
+        
+#        print(a_res.shape)
+#        print(i_res.shape)
+#        print(ahn.shape)
+#        print(a_doc_hn.shape)
+#        print(acous_a.shape, acous_i.shape, a.shape, i.shape)
 
         return a_res, i_res
     def predict(self,acous,a,i):
-        a_res, i_res = self.forward(acous,a,i)
-        a_res_reshape = torch.argmax(a_res,dim=1,keepdim=True).reshape(*(6,4),-1)
-        i_res_reshape = torch.argmax(i_res,dim=1,keepdim=True).reshape(*(6,3),-1)
+        # a_res, i_res = self.forward(acous,a,i)
+        print("original acoustic shape is {}".format(acous.shape))
+        acous = torch.tensor(acous).transpose(1,0)
+        acous_a = acous[:,None,:,:].expand(-1,a.shape[1],-1,-1)
+        acous_a = acous_a.reshape(-1,*acous_a.shape[2:])
+
+        acous_i = acous[:,None,:,:].expand(-1,i.shape[1],-1,-1)
+        acous_i = acous_i.reshape(-1,*acous_i.shape[2:])
+        a = torch.tensor(a)
+        i = torch.tensor(i)
+        a = a.reshape(-1,*a.shape[2:])
+        i = i.reshape(-1,*i.shape[2:])
+
+        index = np.arange(acous_a.shape[0])
+        np.random.shuffle(index)
+        cat_acous = torch.cat((acous_a,acous_i), dim=0)
+        cat_ai = torch.cat((a,i),dim=0)
+
+       #initialize variables for lstm  
+        self.a_h0 = torch.randn(1,cat_acous.shape[0],self.hidden_size)
+        self.a_c0 = torch.randn(1,cat_acous.shape[0],self.hidden_size)
+        self.qa_h0 = torch.randn(1,cat_ai.shape[0],self.hidden_qas_size)
+        self.qa_c0 = torch.randn(1,cat_ai.shape[0],self.hidden_qas_size)
+        _,(ahn,acn) = self.lstm(cat_acous,(self.a_h0,self.a_c0))
+        _,(cat_ai_hn,cat_ai_cn) = self.lstm_a(cat_ai,(self.qa_h0,self.qa_c0))
+        ahn = ahn.squeeze()
+        cat_ai_hn = cat_ai_hn.squeeze()
+        acous_a_doc = self.dock1(ahn)
+        
+        print(cat_ai_hn.shape)
+        print(ahn.shape)
+        print("concatenated sample shape")
+        print(cat_acous.shape)
+        print(cat_ai.shape)
+
+        #print(index)
+        
+        print(a.shape, acous_a.shape)
+        # a_res_reshape = torch.argmax(a_res,dim=1,keepdim=True).reshape(*(6,4),-1)
+        # i_res_reshape = torch.argmax(i_res,dim=1,keepdim=True).reshape(*(6,3),-1)
 #        print(a_res.shape,i_res.shape)
         # print(a_res)
         # print(i_res)
-        return a_res, i_res, a_res_reshape, i_res_reshape
-
+        # return a_res, i_res, a_res_reshape, i_res_reshape
     
 def contains_nan(x):
     a = np.isnan(x)
@@ -268,7 +349,7 @@ def convert_nans(x):
         return np.nan_to_num(x,posinf=20,neginf=0)
     return x 
 def load_qai(trk):
-    path = "/home/gaoruohan19/project/Social-IQ-new/data/qai/"
+    path = "/home/gaoruohan19/project/Social-IQ-new/data/qai_updated/"
 
     a_arr = []
     i_arr = []
@@ -284,14 +365,21 @@ def load_qai(trk):
                 if(array.shape[0]!=24): print(folder)
             else:
                 i_arr.append(array)
-                # print(array.shape)
                 if(array.shape[0]!=18): print(folder)
     
     a_arr = np.stack(a_arr,axis=0)
     i_arr = np.stack(i_arr,axis=0)
-    # print(a_arr.shape)
-    # print(i_arr.shape)
     return a_arr,i_arr
+def calc_F1(a_res,i_res):
+    a_pred = torch.argmax(a_res,dim=1)
+    i_pred = torch.argmax(i_res,dim=1)
+    true = torch.ones(a_res.shape[0],dtype=torch.long)
+    false = torch.zeros(i_res.shape[0],dtype=torch.long)
+    pred = torch.cat((a_pred,i_pred),dim=0).numpy()
+    ground_truth = torch.cat((true,false),dim=0).numpy()
+    f1 = f1_score(ground_truth, pred)
+    accu = accuracy_score(ground_truth, pred)
+    return f1,accu
 
 if __name__=="__main__":
 
@@ -303,90 +391,87 @@ if __name__=="__main__":
         bads=['f5NJQiY9AuY','aHBLOkfJSYI','OWsT2rkqCk8','GxYimeaoea0','o4CKGkaTn-A','gbVOyKifrAo','FiLWlqVE9Fg','srWtQnseRyE','_UJNNySGM6Q','N-6zVmVuTs0','gBs-CkxGXy8','j1CTHVQ8Z3k','ggLOXOiq7WE','2ihOXaU0I8o']
         folds=[trk,dek]
         for bad in bads:
-                for fold in folds:
-                        try:
-                                fold.remove(bad)
-                        except:
-                                pass
+            for fold in folds:
+                try:
+                    fold.remove(bad)
+                except:
+                    pass
 
 
         if preload is True:
-                preloaded_train=process_data(trk)
-                preloaded_dev=process_data(dek)
-                print ("Preloading Complete")
+            preloaded_train=process_data(trk)
+            preloaded_dev=process_data(dek)
+            print ("Preloading Complete")
         else:
-                preloaded_data=None
+            preloaded_data=None
         ds_size = len(trk)
         temp_dim = 25
         input_dim = 74
         input_qas_dim = 768
-        qas_arch = [1024,512,256]
+        qas_arch = [512,256,128,256]
         arch = [128,256,128]
         judge_arch = [512,256,64,2]
         fuse_dim = 768
         model = classifier(temp_dim,input_dim, arch, input_qas_dim, qas_arch, fuse_dim, judge_arch)
-        optimizer = torch.optim.Adam(model.parameters(),weight_decay = 0.0, lr=0.0006,betas=(0.9,0.999))
+        optimizer = torch.optim.Adam(model.parameters(),weight_decay = 0.0, lr=0.0001,betas=(0.9,0.999))
         loss = nn.NLLLoss()
         
         print_model(model)
-        for j in range(int(ds_size/bs)+1):
-            this_trk = trk[j*bs:(j+1)*bs]
-            preloaded_train = process_data(this_trk)
-            #preloaded_dev = process_data(this_trk)
-            qas,_,_,acc = preloaded_train[0],preloaded_train[1],preloaded_train[2],preloaded_train[3]
-            a_arr, i_arr = load_qai(this_trk)
-            # print(a_arr.shape, i_arr.shape)
-            # print(acc.shape)
-            # print(acc[0])
-            # print(a_arr[0]) 
-            is_nan = contains_nan(acc)
-            print("there is nan in acoustic {}".format(is_nan))
-            if(True in is_nan):
-                continue
-            q,a,i = [data for data in qas]
-            acc = convert_nans(acc)
-            a_res, i_res = model(acc,a_arr, i_arr)
-            true = torch.ones(a_res.shape[0],dtype=torch.long)
-            false = torch.zeros(i_res.shape[0],dtype=torch.long)
-            loss_a = loss(a_res, true)
-            loss_i = loss(i_res, false)
-            loss_tot = loss_a+loss_i
-
-            loss_tot.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            print("total loss is {loss_tot},loss_a is {loss_a},loss_i is {loss_i}".format(loss_tot=loss_tot,loss_a=loss_a,loss_i=loss_i))
-            
-            with torch.no_grad():
-                a_pred = torch.argmax(a_res,dim=1)
-                i_pred = torch.argmax(i_res,dim=1)
-                pred = torch.cat((a_pred,i_pred),dim=0).numpy()
-                ground_truth = torch.cat((true,false),dim=0).numpy()
-                f1 = f1_score(ground_truth, pred)
-                print("f1 score is {}".format(f1))
+        num_epoch = 200 
+        for k in range(num_epoch):
+            for j in range(int(ds_size/bs)+1):
+                this_trk = trk[j*bs:(j+1)*bs]
+                preloaded_train = process_data(this_trk)
+                #preloaded_dev = process_data(this_trk)
+                qas,_,_,acc = preloaded_train[0],preloaded_train[1],preloaded_train[2],preloaded_train[3]
+                a_arr, i_arr = load_qai(this_trk)
+                # print(a_arr.shape, i_arr.shape)
+                # print(acc.shape)
+                is_nan = contains_nan(acc)
+                print("there is nan in acoustic {}".format(is_nan))
+                # if(True in is_nan):
+                #     continue
+                acc = convert_nans(acc)
+                a_res, i_res = model(acc,a_arr, i_arr)
+                true = torch.ones(a_res.shape[0],dtype=torch.long)
+                false = torch.zeros(i_res.shape[0],dtype=torch.long)
+                loss_a = loss(a_res, true)
+                loss_i = loss(i_res, false)
+                loss_tot = loss_a+loss_i
+    
+                print("total loss is {loss_tot},loss_a is {loss_a},loss_i is {loss_i}".format(loss_tot=loss_tot,loss_a=loss_a,loss_i=loss_i))
+    
+                loss_tot.backward()
+                optimizer.step()
+                optimizer.zero_grad()
                 
-            print("________")
-            # break
-        print("finish epoch {j}".format(j=j))
-
-
-        ## validation ##
-        # with torch.no_grad():
-        #     ds_size = len(dek)
-        #     bs = 1
-        #     for i in range(int(ds_size/bs)+1):
-        #         this_dek = dek[i*bs:(i+1)*bs]
-        #         #print("validation batches")
-        #         print(this_dek) 
-        #         if(len(this_dek)==0): continue 
-        #         preload_dev = process_data(this_dek)
-        #         qas,_,_,acc = preload_dev[0],preload_dev[1],preload_dev[2],preload_dev[3]
-        #         a_arr, i_arr = load_qai(this_dek)
-        #         if(a_arr.shape[1]!=24 or i_arr.shape[1]!=18): 
-        #             print(a_arr.shape,i_arr.shape)
-        #             print(this_dek)
-
-        #         a_res, i_res, a_res_reshape, i_res_reshape = model.predict(acc,a_arr,i_arr)
-
-        #         break
+                with torch.no_grad():
+                    print("f1 score and accuracy are {f1}, and {accu}".format(f1 = calc_F1(a_res,i_res)[0], accu = calc_F1(a_res,i_res)[1]))
+                    
+                print("________")
+    #            break
+            if(k % 20 ==0):
+                torch.save(model.state_dict(),"./model_weights/model_{}".format(k))
+            # print("finish epoch {j}".format(j=j))
+    
+    
+            # validation ##
+           # with torch.no_grad():
+           #     ds_size = len(dek)
+           #     bs = 1
+           #     for i in range(int(ds_size/bs)+1):
+           #         this_dek = dek[i*bs:(i+1)*bs]
+           #         print("validation batches")
+           #         if(len(this_dek)==0): continue 
+           #         preload_dev = process_data(this_dek)
+           #         qas,_,_,acc = preload_dev[0],preload_dev[1],preload_dev[2],preload_dev[3]
+           #         a_arr, i_arr = load_qai(this_dek)
+           #         if(a_arr.shape[1]!=24 or i_arr.shape[1]!=18): 
+           #             print(a_arr.shape,i_arr.shape)
+           #             print(this_dek)
+    
+           #         # a_res, i_res, a_res_reshape, i_res_reshape = model.predict(acc,a_arr,i_arr)
+           #         model.predict(acc,a_arr,i_arr)
+           #          print("f1 score and accuracy are {f1}, and {accu}".format(f1 = calc_F1(a_res,i_res)[0], accu = calc_F1(a_res,i_res)[1]))
+           #         break
 
