@@ -449,7 +449,7 @@ if __name__=="__main__":
                     print("f1 score and accuracy are {f1}, and {accu}".format(f1 = calc_F1(a_res,i_res)[0], accu = calc_F1(a_res,i_res)[1]))
                     
                 print("________")
-                break
+                # break
             if(k % 20 ==0):
                 torch.save(model.state_dict(),"./model_weights/model_{}.pth".format(k))
             # print("finish epoch {j}".format(j=j))
