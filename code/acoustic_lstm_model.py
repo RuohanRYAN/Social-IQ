@@ -418,7 +418,18 @@ if __name__=="__main__":
         
         print_model(model)
         num_epoch = 200 
-        for k in range(num_epoch):
+        onlyfiles = [int(f.split("_")[1].split(".")[0]) for f in os.listdir("./model_weights") if os.path.isfile(os.path.join("./model_weights", f))]
+        print(onlyfiles)
+        start = 0
+        if(len(onlyfiles)!=0):
+            model.load_state_dict(torch.load("./model_weights/model_{}.pth".format(max(onlyfiles))))
+            start = max(onlyfiles)
+        loss_array = []
+        f_array = []
+        acc_array = []
+
+        for k in range(start,num_epoch):
+            print("starting epoch {k}".format(k=k))
             for j in range(int(ds_size/bs)+1):
                 this_trk = trk[j*bs:(j+1)*bs]
                 preloaded_train = process_data(this_trk)
@@ -429,8 +440,6 @@ if __name__=="__main__":
                 # print(acc.shape)
                 is_nan = contains_nan(acc)
                 print("there is nan in acoustic {}".format(is_nan))
-                # if(True in is_nan):
-                #     continue
                 acc = convert_nans(acc)
                 a_res, i_res = model(acc,a_arr, i_arr)
                 true = torch.ones(a_res.shape[0],dtype=torch.long)
@@ -447,11 +456,13 @@ if __name__=="__main__":
                 
                 with torch.no_grad():
                     print("f1 score and accuracy are {f1}, and {accu}".format(f1 = calc_F1(a_res,i_res)[0], accu = calc_F1(a_res,i_res)[1]))
-                    
+                            
                 print("________")
                 # break
-            if(k % 20 ==0):
+            if(k % 5 ==0):
+                print("saving model_{}".format(k))
                 torch.save(model.state_dict(),"./model_weights/model_{}.pth".format(k))
+            # break
             # print("finish epoch {j}".format(j=j))
     
     
