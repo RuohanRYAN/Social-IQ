@@ -18,7 +18,7 @@ class MyHingeLoss(torch.nn.Module):
     def forward(self, correct, incorrect):
         hinge_loss = 1 - correct + incorrect
         hinge_loss[hinge_loss < 0] = 0
-        return torch.mean(hinge_loss)
+        return torch.mean(hinge_loss)/2
 
 def flatten_qail(_input):
    # y = _input.squeeze().transpose(3, 0, 1, 2, 4)
@@ -41,22 +41,22 @@ def calc_accuracy(correct, incorrect):
 
 def get_indexs(index):
     th = len(index)/2
-    cIndex = []
-    iIndex = []
+    cIndex = [0]*int(th)
+    iIndex = [0]*int(th)
     for i in range(len(index)):
         if index[i] < th:
-            cIndex.append(i)
+            cIndex[index[i]] = i
         else:
-            iIndex.append(i)
+            iIndex[index[i]-int(th)] = i
     return cIndex, iIndex
 
 def train(model, trk,dek, bs):
     multi = 2
     judge = get_judge()
     paras = list(model.parameters())+list(judge.parameters())
-    optimizer = optim.Adam(paras, lr=0.001)
-    loss = MyHingeLoss()
-    for i in range(10):
+    optimizer = optim.Adam(paras, lr=0.01)
+    hingeloss = MyHingeLoss()
+    for i in range(100):
         print("Epoch %d" % i)
         losses = []
         accs = []
@@ -81,7 +81,7 @@ def train(model, trk,dek, bs):
             vis_append = np.concatenate((vis,vis),axis=1).transpose(1,0,2)
             q_append = np.concatenate((q,q),axis=1).transpose(1,0,2)
             a_append = np.concatenate((a,i),axis=1).transpose(1,0,2)
-            index = [k for k in range(bs*2)]
+            index = [k for k in range(q_append.shape[0])]
             random.shuffle(index)
             cIndex, iIndex = get_indexs(index)
             q_append = q_append[index].transpose(1,0,2)
@@ -96,10 +96,11 @@ def train(model, trk,dek, bs):
             correct_mean = Variable(torch.Tensor(numpy.ones((bs,1))), requires_grad=False)
             incorrect_mean = Variable(torch.Tensor(numpy.zeros((bs,1))), requires_grad=False)
 
-            optimizer.zero_grad()
+           # optimizer.zero_grad()
 
            # loss = (nn.MSELoss()(correct, correct_mean.float()) + nn.MSELoss()(incorrect, incorrect_mean.float()))
-            loss(correct, incorrect)
+            loss = hingeloss(correct, incorrect)
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             losses.append(loss.cpu().detach().numpy())
@@ -111,7 +112,7 @@ def train(model, trk,dek, bs):
 
         _accs = []
         ds_size = len(dek)
-       # bs = 30
+        bs = 8
         for j in range(int(ds_size / bs)):
             print("batch num %d" % j)
             this_dek = dek[j * bs:(j + 1) * bs]
@@ -131,7 +132,7 @@ def train(model, trk,dek, bs):
           #  vis_append = np.concatenate((visual, visual), axis=1).transpose(1, 0, 2)
             q_append = np.concatenate((q, q), axis=1).transpose(1, 0, 2)
             a_append = np.concatenate((a, i), axis=1).transpose(1, 0, 2)
-            index = [k for k in range(bs * 2)]
+            index = [k for k in range(q_append.shape[0])]
             random.shuffle(index)
             cIndex, iIndex = get_indexs(index)
             q_append = q_append[index].transpose(1, 0, 2)
@@ -149,7 +150,7 @@ def train(model, trk,dek, bs):
 if __name__ == "__main__":
 
 
-    bs = 32
+    bs = 12
     trk, dek = get_data()
     model = DualLstm()
     train(model, trk,dek, bs)
