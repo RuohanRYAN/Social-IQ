@@ -116,6 +116,6 @@ def get_tokens(tokens,model):
 	return ave_token
 
 
-qa_path = "/home/gaoruohan19/project/Social-IQ/data/rawdata/raw/qa/"
-dest = "/home/gaoruohan19/project/Social-IQ-new/data/qai_updated/"
+qa_path = "/home/lydiayangyy98/qa/"
+dest = "/home/lydiayangyy98/Social-IQ/data/qai_updated/"
 main(qa_path,dest)

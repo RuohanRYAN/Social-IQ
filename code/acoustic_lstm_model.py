@@ -12,7 +12,7 @@ from model import mylstm
 import h5py
 import mmsdk
 from mmsdk import mmdatasdk
-from mmsdk.mmmodelsdk.fusion import TensorFusion
+#from mmsdk.mmmodelsdk.fusion import TensorFusion
 import numpy
 import pickle
 from random import shuffle
@@ -349,7 +349,7 @@ def convert_nans(x):
         return np.nan_to_num(x,posinf=20,neginf=0)
     return x 
 def load_qai(trk):
-    path = "/home/gaoruohan19/project/Social-IQ-new/data/qai_updated/"
+    path = "/home/lydiayangyy98/Social-IQ/data/qai_updated/"
 
     a_arr = []
     i_arr = []
