@@ -380,7 +380,33 @@ def calc_F1(a_res,i_res):
     f1 = f1_score(ground_truth, pred)
     accu = accuracy_score(ground_truth, pred)
     return f1,accu
-
+def inference(model,ds_size,bs,trk,loss):
+    loss_array = []
+    f_array = []
+    acc_array = []
+    model.eval()
+    for j in range(int(ds_size/bs)+1):
+        this_trk = trk[j*bs:(j+1)*bs]
+        preloaded_train = process_data(this_trk)
+        qas,_,_,acc = preloaded_train[0],preloaded_train[1],preloaded_train[2],preloaded_train[3]
+        a_arr, i_arr = load_qai(this_trk)
+        is_nan = contains_nan(acc)
+        acc = convert_nans(acc)
+        a_res, i_res = model(acc,a_arr, i_arr)
+        true = torch.ones(a_res.shape[0],dtype=torch.long)
+        false = torch.zeros(i_res.shape[0],dtype=torch.long)
+        loss_a = loss(a_res, true)
+        loss_i = loss(i_res, false)
+        loss_tot = loss_a+loss_i
+#        print("total loss is {loss_tot},loss_a is {loss_a},loss_i is {loss_i}".format(loss_tot=loss_tot,loss_a=loss_a,loss_i=loss_i))
+        f1 = calc_F1(a_res,i_res)[0]
+        accu = calc_F1(a_res,i_res)[1]
+#        print("f1 score and accuracy are {f1}, and {accu}".format(f1 = f1, accu = accu))
+        loss_array.append(float(loss_tot.detach().numpy()))
+        f_array.append(f1)
+        acc_array.append(accu)
+        break
+    return sum(loss_array) / float(len(loss_array)), sum(f_array) / float(len(f_array)), sum(acc_array) / float(len(acc_array))
 if __name__=="__main__":
 
         #if you have enough RAM, specify this as True - speeds things up ;)
@@ -409,7 +435,7 @@ if __name__=="__main__":
         input_dim = 768 
         input_qas_dim = 768
         qas_arch = [512,256,128,256]
-        arch = [128,256,128]
+        arch = [512,256,256,128]
         judge_arch = [512,256,64,2]
         fuse_dim = 768
         model = classifier(temp_dim,input_dim, arch, input_qas_dim, qas_arch, fuse_dim, judge_arch)
@@ -418,50 +444,47 @@ if __name__=="__main__":
         
         print_model(model)
         num_epoch = 200 
-#        onlyfiles = [int(f.split("_")[1].split(".")[0]) for f in os.listdir("./model_weights") if os.path.isfile(os.path.join("./model_weights", f))]
-#        print(onlyfiles)
+        onlyfiles = [int(f.split("_")[1].split(".")[0]) for f in os.listdir("./model_weights_transcripts") if os.path.isfile(os.path.join("./model_weights_transcripts", f))]
+        print(onlyfiles)
         start = 0
-#        if(len(onlyfiles)!=0):
-#            model.load_state_dict(torch.load("./model_weights/model_{}.pth".format(max(onlyfiles))))
-#            start = max(onlyfiles)
-#        loss_array = []
-#        f_array = []
-#        acc_array = []
+        if(len(onlyfiles)!=0):
+            model.load_state_dict(torch.load("./model_weights_transcripts/model_{}.pth".format(max(onlyfiles))))
+            start = max(onlyfiles)
+        loss_array = []
+        f_array = []
+        acc_array = []
         for k in range(start,num_epoch):
             print("starting epoch {k}".format(k=k))
             for j in range(int(ds_size/bs)+1):
                 this_trk = trk[j*bs:(j+1)*bs]
                 preloaded_train = process_data(this_trk)
-                #preloaded_dev = process_data(this_trk)
                 qas,_,trs,acc = preloaded_train[0],preloaded_train[1],preloaded_train[2],preloaded_train[3]
                 print(trs.shape)
                 a_arr, i_arr = load_qai(this_trk)
-#                # print(a_arr.shape, i_arr.shape)
-#                # print(acc.shape)
                 is_nan = contains_nan(trs)
                 print("there is nan in acoustic {}".format(is_nan))
                 trs = convert_nans(trs)
                 a_res, i_res = model(trs,a_arr, i_arr)
-#                true = torch.ones(a_res.shape[0],dtype=torch.long)
-#                false = torch.zeros(i_res.shape[0],dtype=torch.long)
-#                loss_a = loss(a_res, true)
-#                loss_i = loss(i_res, false)
-#                loss_tot = loss_a+loss_i
-#    
-#                print("total loss is {loss_tot},loss_a is {loss_a},loss_i is {loss_i}".format(loss_tot=loss_tot,loss_a=loss_a,loss_i=loss_i))
-#    
-#                loss_tot.backward()
-#                optimizer.step()
-#                optimizer.zero_grad()
-#                
-#                with torch.no_grad():
-#                    print("f1 score and accuracy are {f1}, and {accu}".format(f1 = calc_F1(a_res,i_res)[0], accu = calc_F1(a_res,i_res)[1]))
-#                            
-#                print("________")
-#                # break
-#            if(k % 5 ==0):
-#                print("saving model_{}".format(k))
-#                torch.save(model.state_dict(),"./model_weights/model_{}.pth".format(k))
+                true = torch.ones(a_res.shape[0],dtype=torch.long)
+                false = torch.zeros(i_res.shape[0],dtype=torch.long)
+                loss_a = loss(a_res, true)
+                loss_i = loss(i_res, false)
+                loss_tot = loss_a+loss_i
+    
+                print("total loss is {loss_tot},loss_a is {loss_a},loss_i is {loss_i}".format(loss_tot=loss_tot,loss_a=loss_a,loss_i=loss_i))
+    
+                loss_tot.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                
+                with torch.no_grad():
+                    print("f1 score and accuracy are {f1}, and {accu}".format(f1 = calc_F1(a_res,i_res)[0], accu = calc_F1(a_res,i_res)[1]))
+                            
+                print("________")
+                # break
+            if(k % 1 ==0):
+                print("saving model_{}".format(k))
+                torch.save(model.state_dict(),"./model_weights_transcripts/model_{}.pth".format(k))
             # break
             # print("finish epoch {j}".format(j=j))
     
