@@ -129,6 +129,7 @@ class classifier(nn.Module):
         self.qas_arch = qas_arch
         self.v_arch = v_arch
         self.t_arch = t_arch
+        self.fuse_arch = fuse_arch
         self.fuse_dim = fuse_arch[-1]+qas_arch[-1]
         self.context_dim = arch[-1]+v_arch[-1]+t_arch[-1]
         self.judge_arch = judge_arch
@@ -326,10 +327,10 @@ class classifier(nn.Module):
         self.qi_c0 = torch.randn(1,acous_i.shape[0],self.hidden_qas_size)
         _,(ahn,acn) = self.lstm(acous_a,(self.a_h0,self.a_c0))
         _,(ihn,icn) = self.lstm(acous_i,(self.i_h0,self.i_c0))
-        _, (ahn_v, acn_v) = self.lstm(video_a, (self.a_v_h0, self.a_v_c0))
-        _, (ihn_v, icn_v) = self.lstm(video_i, (self.i_v_h0, self.i_v_c0))
-        _, (ahn_t, acn_t) = self.lstm(transcript_a, (self.a_t_h0, self.a_t_c0))
-        _, (ihn_t, icn_t) = self.lstm(transcript_i, (self.i_t_h0, self.i_t_c0))
+        _, (ahn_v, acn_v) = self.lstm_v(video_a, (self.a_v_h0, self.a_v_c0))
+        _, (ihn_v, icn_v) = self.lstm_v(video_i, (self.i_v_h0, self.i_v_c0))
+        _, (ahn_t, acn_t) = self.lstm_t(transcript_a, (self.a_t_h0, self.a_t_c0))
+        _, (ihn_t, icn_t) = self.lstm_t(transcript_i, (self.i_t_h0, self.i_t_c0))
 
         _,(a_doc_hn,a_doc_cn) = self.lstm_a(a,(self.qa_h0,self.qa_c0))
         _,(i_doc_hn,i_doc_cn) = self.lstm_a(i,(self.qi_h0,self.qi_c0))
@@ -478,12 +479,12 @@ if __name__=="__main__":
         temp_dim = 25
         input_dim = 74
         input_qas_dim = 768
-        v_arch = [512,256,128,256]
-        t_arch = [512,256,128,256]
-        fuse_arch = [512,256,128,256]
-        qas_arch = [512,256,128,256]
-        arch = [128,256,128]
-        judge_arch = [512,256,64,2]
+        v_arch = [256,128,256]
+        t_arch = [128,64,128]
+        fuse_arch = [256,128,256]
+        qas_arch = [128,64,128]
+        arch = [64,32,64]
+        judge_arch = [256,64,2]
         fuse_dim = 768
         model = classifier(temp_dim, input_dim, arch,input_qas_dim, qas_arch, judge_arch, v_arch, t_arch, fuse_arch)
         optimizer = torch.optim.Adam(model.parameters(),weight_decay = 0.0, lr=0.0001,betas=(0.9,0.999))
@@ -514,8 +515,8 @@ if __name__=="__main__":
                 is_nan = contains_nan(acc)
                 print("there is nan in acoustic {}".format(is_nan))
                 acc = convert_nans(acc)
-                vis = convert_nans(vis)
-                trs = convert_nans(trs)
+               # vis = convert_nans(vis)
+               # trs = convert_nans(trs)
                 a_res, i_res = model(acc,a_arr, i_arr,vis,trs)
                 true = torch.ones(a_res.shape[0],dtype=torch.long)
                 false = torch.zeros(i_res.shape[0],dtype=torch.long)
