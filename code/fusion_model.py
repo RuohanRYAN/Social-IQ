@@ -363,7 +363,7 @@ class classifier(nn.Module):
 #        print(acous_a.shape, acous_i.shape, a.shape, i.shape)
 
         return a_res, i_res
-    def predict(self,acous,a,i):
+    def predict(self,acous,a,i,video,transcript):
         # a_res, i_res = self.forward(acous,a,i)
         print("original acoustic shape is {}".format(acous.shape))
         acous = torch.tensor(acous).transpose(1,0)
@@ -546,19 +546,27 @@ if __name__=="__main__":
            # with torch.no_grad():
            #     ds_size = len(dek)
            #     bs = 1
-           #     for i in range(int(ds_size/bs)+1):
-           #         this_dek = dek[i*bs:(i+1)*bs]
-           #         print("validation batches")
+        f1_avg = 0
+        accu_avg = 0
+        count = 0
+        for i in range(int(ds_size/bs)+1):
+            this_dek = dek[i*bs:(i+1)*bs]
+            print("validation batches",i)
            #         if(len(this_dek)==0): continue 
-           #         preload_dev = process_data(this_dek)
-           #         qas,_,_,acc = preload_dev[0],preload_dev[1],preload_dev[2],preload_dev[3]
-           #         a_arr, i_arr = load_qai(this_dek)
+            preload_dev = process_data(this_dek)
+            qas,vis,trs,acc = preload_dev[0],preload_dev[1],preload_dev[2],preload_dev[3]
+            a_arr, i_arr = load_qai(this_dek)
            #         if(a_arr.shape[1]!=24 or i_arr.shape[1]!=18): 
            #             print(a_arr.shape,i_arr.shape)
            #             print(this_dek)
     
            #         # a_res, i_res, a_res_reshape, i_res_reshape = model.predict(acc,a_arr,i_arr)
-           #         model.predict(acc,a_arr,i_arr)
-           #          print("f1 score and accuracy are {f1}, and {accu}".format(f1 = calc_F1(a_res,i_res)[0], accu = calc_F1(a_res,i_res)[1]))
+            a_res,i_res = model(acc,a_arr,i_arr,vis, trs)
+            f1 = calc_F1(a_res, i_res)[0]
+            accu = calc_F1(a_res, i_res)[1]
+            f1_avg += f1
+            accu_avg += accu
+            count += 1
+        print("f1 score and accuracy are {f1}, and {accu}".format(f1_avg/count,accu_avg/count))
            #         break
 
