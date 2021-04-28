@@ -135,7 +135,7 @@ class classifier(nn.Module):
         self.judge_arch = judge_arch
         self.hidden_size = 74
         self.hidden_qas_size = 128
-        self.hidden_v_size = 256
+        self.hidden_v_size = 512 #256
         self.build()
         
     def build(self,):
@@ -479,31 +479,46 @@ if __name__=="__main__":
         temp_dim = 25
         input_dim = 74
         input_qas_dim = 768
-        v_arch = [256,128,256]
-        t_arch = [128,64,128]
-        fuse_arch = [256,128,256]
-        qas_arch = [128,64,128]
-        arch = [64,32,64]
-        judge_arch = [256,64,2]
+       # v_arch = [256,128,256]
+       # t_arch = [128,64,128]
+       # fuse_arch = [256,128,256]
+       # v_arch = [512,256,128,256]
+        v_arch = [1024,512,256,512]
+        t_arch = [512,256,128,256]
+        fuse_arch = [1024,512,256,512]
+       # qas_arch = [128,64,128]
+       # arch = [64,32,64]
+       # judge_arch = [256,64,2]
+        qas_arch = [512,256,128,256]
+        arch = [128,256,128]
+        judge_arch = [512,256,64,2]
         fuse_dim = 768
         model = classifier(temp_dim, input_dim, arch,input_qas_dim, qas_arch, judge_arch, v_arch, t_arch, fuse_arch)
         optimizer = torch.optim.Adam(model.parameters(),weight_decay = 0.0, lr=0.0001,betas=(0.9,0.999))
         loss = nn.NLLLoss()
         
         print_model(model)
-        num_epoch = 200 
-        onlyfiles = [int(f.split("_")[1].split(".")[0]) for f in os.listdir("./model_weights") if os.path.isfile(os.path.join("./model_weights", f))]
+        num_epoch = 101 
+        onlyfiles = [int(f.split("_")[1].split(".")[0]) for f in os.listdir("./model_weights2") if os.path.isfile(os.path.join("./model_weights2", f))]
         print(onlyfiles)
         start = 0
         if(len(onlyfiles)!=0):
-            model.load_state_dict(torch.load("./model_weights/model_{}.pth".format(max(onlyfiles))))
+            model.load_state_dict(torch.load("./model_weights2/model_{}.pth".format(max(onlyfiles))))
             start = max(onlyfiles)
         loss_array = []
+        loss_array_dev = []
         f_array = []
+        f_array_dev = []
         acc_array = []
+        acc_array_dev = []
+        
 
         for k in range(start,num_epoch):
             print("starting epoch {k}".format(k=k))
+            loss_tr = 0
+            f1_tr = 0
+            acc_tr = 0
+            trcount = 0
             for j in range(int(ds_size/bs)+1):
                 this_trk = trk[j*bs:(j+1)*bs]
                 preloaded_train = process_data(this_trk)
@@ -531,13 +546,20 @@ if __name__=="__main__":
                 optimizer.zero_grad()
                 
                 with torch.no_grad():
+                    f1_tr += calc_F1(a_res,i_res)[0]
+                    acc_tr += calc_F1(a_res,i_res)[1]
+                    loss_tr += loss_tot
+                    trcount+=1
                     print("f1 score and accuracy are {f1}, and {accu}".format(f1 = calc_F1(a_res,i_res)[0], accu = calc_F1(a_res,i_res)[1]))
                             
                 print("________")
                 # break
             if(k % 5 ==0):
                 print("saving model_{}".format(k))
-                torch.save(model.state_dict(),"./model_weights/model_{}.pth".format(k))
+                torch.save(model.state_dict(),"./model_weights2/model_{}.pth".format(k))
+                #loss_array.append(loss_tr/trcount)
+               # f_array.append(f1_tr/trcount)
+               # acc_array.append(acc_tr/trcount)
             # break
             # print("finish epoch {j}".format(j=j))
     
@@ -546,27 +568,41 @@ if __name__=="__main__":
            # with torch.no_grad():
            #     ds_size = len(dek)
            #     bs = 1
-        f1_avg = 0
-        accu_avg = 0
-        count = 0
-        for i in range(int(ds_size/bs)+1):
-            this_dek = dek[i*bs:(i+1)*bs]
-            print("validation batches",i)
-           #         if(len(this_dek)==0): continue 
-            preload_dev = process_data(this_dek)
-            qas,vis,trs,acc = preload_dev[0],preload_dev[1],preload_dev[2],preload_dev[3]
-            a_arr, i_arr = load_qai(this_dek)
+                f1_avg = 0
+                accu_avg = 0
+                loss_avg = 0
+                count = 0
+                for i in range(int(ds_size/bs)+1):
+                    this_dek = dek[i*bs:(i+1)*bs]
+                #    print("validation batches",i)
+                    if(len(this_dek)==0): continue 
+                    preload_dev = process_data(this_dek)
+                    qas,vis,trs,acc = preload_dev[0],preload_dev[1],preload_dev[2],preload_dev[3]
+                    a_arr, i_arr = load_qai(this_dek)
            #         if(a_arr.shape[1]!=24 or i_arr.shape[1]!=18): 
            #             print(a_arr.shape,i_arr.shape)
            #             print(this_dek)
     
            #         # a_res, i_res, a_res_reshape, i_res_reshape = model.predict(acc,a_arr,i_arr)
-            a_res,i_res = model(acc,a_arr,i_arr,vis, trs)
-            f1 = calc_F1(a_res, i_res)[0]
-            accu = calc_F1(a_res, i_res)[1]
-            f1_avg += f1
-            accu_avg += accu
-            count += 1
-        print("f1 score and accuracy are {f1}, and {accu}".format(f1_avg/count,accu_avg/count))
+                    a_res,i_res = model(acc,a_arr,i_arr,vis, trs)
+                    true = torch.ones(a_res.shape[0],dtype=torch.long)
+                    false = torch.zeros(i_res.shape[0],dtype=torch.long)
+                    loss_a = loss(a_res, true)
+                    loss_i = loss(i_res, false)
+                    loss_tot = loss_a+loss_i
+                    loss_avg += loss_tot
+                    f1 = calc_F1(a_res, i_res)[0]
+                    accu = calc_F1(a_res, i_res)[1]
+                    f1_avg += f1
+                    accu_avg += accu
+                    count += 1
+                print("f1 score and accuracy are {f1}, and {accu}, and {loss}".format(f1=f1_avg/count,accu=accu_avg/count,loss=loss_avg/count))
+             #   loss_array_dev.append(loss_avg/count)
+            #    f_array_dev.append(f1_avg/count)
+              #  acc_array_dev.append(accu_avg/count)
+            
+                data = {'tr_loss':loss_tr/trcount,'tr_f1':f1_tr/trcount,'tr_acc':acc_tr/trcount,'de_loss':loss_avg/count,'de_f1':f1_avg/count,'de_acc':accu_avg/count}
+                with open("./model_data1/data_{}.pth".format(k), 'wb') as f:
+                    pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
            #         break
 
